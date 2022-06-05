@@ -1,0 +1,8 @@
+{
+  "host": "http://127.0.0.1:1999",
+  "port": 1999,
+  "siyuanURL": "https://YOUR_SIYUAN_URL",
+  "onlyofficeURL": "https://YOUR_ONLYOFFICE_URL",
+  "dataPath": "/Users/Administrator/Documents/SiYuan/data/data/",
+  "tokenSecret": "abc123"
+}

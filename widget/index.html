@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="node_modules/@shoelace-style/shoelace/dist/themes/light.css">
+  <script type="module" src="node_modules/@shoelace-style/shoelace/dist/shoelace.js"></script>
+  <style>
+    .asset-path {
+      display: flex;
+    }
+    .asset-path sl-input {
+      flex-grow: 1;
+    }
+    .hidden {
+      display: none !important;
+    }
+    html, body, .onlyoffice {
+      margin: 0;
+      height: 100%;
+    }
+    body {
+      font-family: var(--sl-font-sans);
+    }
+    .new-window {
+      float: right;
+      position: absolute;
+      right: 4px;
+    }
+  </style>
+  <title>OnlyOffice Siyuan</title>
+</head>
+<body>
+  <!--<sl-button onclick="location.reload()">Click me</sl-button>-->
+  <sl-button variant="default" size="small" circle class="new-window">
+    <sl-icon name="arrows-fullscreen" label="New Window"></sl-icon>
+  </sl-button>
+  <div class="set-asset hidden">
+    <form class="asset-path">
+      <sl-input name="asset-path" placeholder="Asset Path" help-text="Upload an asset and right-click the link to get the path" required></sl-input><sl-button type="submit" variant="primary">Submit</sl-button>
+    </form>
+    <br />
+    <p>Or create a new: <sl-button variant="text" class="create-file">docx</sl-button>&nbsp;<sl-button variant="text" class="create-file">xlsx</sl-button></p>
+  </div>
+  <div class="onlyoffice hidden">
+    <div id="placeholder"></div>
+  </div>
+
+  <script type="module">
+    import { emptyDocx, emptyXlsx } from './new-docs.mjs'
+    const inIframe = parent.window !== window
+    const host = window.location.protocol + '//' + window.location.host
+    const apiServerHost = 'http://127.0.0.1:1999'
+    const form = document.querySelector('.asset-path')
+    const initializeOnlyOffice = async () => {
+      document.querySelector('.onlyoffice').classList.remove('hidden')
+      document.querySelector('.set-asset').classList.add('hidden')
+      const config = await fetch(apiServerHost + '/onlyoffice/config?assetPath=' + encodeURIComponent(assetPath)).then(a => a.json())
+      const script = document.createElement('script')
+      script.src = config.js
+      script.addEventListener('load', () => {
+        const docEditor = new DocsAPI.DocEditor("placeholder", config.config)
+      })
+      document.body.appendChild(script)
+    }
+
+    document.querySelector('.new-window').addEventListener('click', () => {
+      window.open(location.href + '?assetPath=' + encodeURIComponent(assetPath), '_blank')
+    })
+    let assetPath = ''
+    if (inIframe) {
+      const widgetElement = self.frameElement.parentElement.parentElement
+      const widgetNodeId = widgetElement.getAttribute('data-node-id')
+      const parentWindow = parent.window
+      const apiToken = parentWindow.siyuan.config.api.token
+      const getFromSiyuan = (url, data) =>
+        fetch(host + url, {
+          method: 'GET',
+          headers: {
+            Authorization: `Token ${apiToken}`
+          }
+        }).then(a => a.json())
+
+      const postToSiyuan = (url, data, stringify = true) =>
+        fetch(host + url, {
+          method: 'POST',
+          body: stringify ? JSON.stringify(data) : data,
+          headers: {
+            Authorization: `Token ${apiToken}`
+          }
+        })
+        .then(a => a.json())
+        .then(a => {
+          if (a.code === 0) {
+            return a.data
+          } else {
+            throw new Error(a)
+          }
+        })
+
+      const setSiyuanBlockAttribute = (assetPath) => {
+        return postToSiyuan('/api/attr/setBlockAttrs', {
+          id: widgetNodeId,
+          attrs: {
+            'data-assets': assetPath,
+            'name': assetPath
+          }
+        })
+      }
+
+      const getSiyuanAssetPath = () =>
+        postToSiyuan('/api/attr/getBlockAttrs', {id: encodeURIComponent(widgetNodeId)})
+        .then(a => a['data-assets'])
+
+      assetPath = await getSiyuanAssetPath()
+      if (assetPath) {
+        initializeOnlyOffice()
+      } else {
+        document.querySelector('.set-asset').classList.remove('hidden')
+        form.addEventListener('submit', event => {
+          const inputAssetPath = form.querySelector('[name="asset-path"]').value
+          assetPath = inputAssetPath
+          event.preventDefault()
+          fetch(host + '/' + inputAssetPath)
+            .then(p => p.arrayBuffer())
+            .then(_ => setSiyuanBlockAttribute(inputAssetPath))
+            .then(_ => initializeOnlyOffice())
+            .catch(e => {
+              alert('Invalid asset path!')
+              console.error(e)
+            })
+        })
+        Array.from(document.querySelectorAll('.create-file')).map(dom => {
+          dom.addEventListener('click', async e => {
+            e.preventDefault()
+            const type = e.target.innerText
+            let fileName = document.querySelector('[name="asset-path"]').value
+            if (fileName === '') {
+              return alert('Please input filename')
+            }
+            if (fileName.indexOf('.' + type) <= 0) {
+              fileName += '.' + type
+            }
+            let emptyContent
+            if (type == 'docx') {
+              emptyContent = emptyDocx
+            } else if (type === 'xlsx') {
+              emptyContent = emptyXlsx
+            }
+            const data = new FormData()
+            data.append('assetsDirPath', '/assets/')
+            data.append('file[]', new File([new Blob([atob(emptyContent)])], fileName))
+            const ret = await postToSiyuan('/api/asset/upload', data, false)
+            assetPath = ret.succMap[fileName]
+            await setSiyuanBlockAttribute(assetPath)
+            initializeOnlyOffice()
+          })
+        })
+      }
+    } else {
+      document.querySelector('.new-window').classList.add('hidden')
+      assetPath = decodeURIComponent(location.search.split('?assetPath=')[1])
+      initializeOnlyOffice()
+    }
+
+  </script>
+</body>
+</html>
