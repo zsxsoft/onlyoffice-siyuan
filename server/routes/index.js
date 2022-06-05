@@ -5,14 +5,6 @@ const fs = require('fs')
 const axios = require('axios')
 const path = require('path')
 const { md5, officeExts } = require('../utils')
-/* GET home page. */
-router.get('/', function (_req, res, _next) {
-  res.render('index', { title: 'Express' })
-})
-
-router.get('/onlyoffice/api.js', (req, res, next) => {
-  return res.redirect()
-})
 
 router.get('/onlyoffice/config', (req, res, next) => {
   const assetPath = req.query.assetPath
